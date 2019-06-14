@@ -11,17 +11,15 @@ from autodiff.tensor import Tensor
 from autodiff.devtools import unstable, placeholder
 
 
-@unstable
-def sum(tensor):
-    result = Tensor(np.sum(tensor.value))
-    tensor.dependencies[result] = ({"local": np.ones(shape=tensor.shape)}, lambda cache, from_above: cache["local"] * from_above)
-
-    return result
-
-
-@unstable
-def single_sum(tensor, axis):
-    assert type(axis) is int
+def sum(tensor, axis):
+    """
+    Sums the array over the specified axis.
+    Dimension stays the same.
+    :param tensor: Tensor object.
+    :param axis: int or tuple of ints, axis to
+    be summed over.
+    :return: New Tensor object.
+    """
     result = Tensor(np.sum(tensor.value, axis=axis, keepdims=True))
     tensor.dependencies[result] = ({"shape": tensor.shape}, lambda cache, from_above: np.broadcast_to(from_above, shape=cache["shape"]))
 
