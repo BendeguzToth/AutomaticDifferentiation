@@ -86,6 +86,17 @@ class Tensor:
         """
         self.dependencies.clear()
 
+    def remove_dependency(self, tensor):
+        """
+        Removes 'tensor' from the dependencies.
+        If tensor not found nothing happens.
+        :param tensor: The Tensor object to be removed.
+        """
+        try:
+            self.dependencies.pop(tensor)
+        except KeyError:
+            pass
+
     def start_backprop_here(self):
         """
         This function is used to mark the final node in
@@ -196,6 +207,7 @@ def derive(dF, dx):
     """
     Calculates the derivative of the Tensor dF with respect to dx.
     Sets Tensor.error of all the Tensor object in the list.
+    IT WILL SET dF.grad() TO ONES!
     :param dF: The 'final' node.
     :param dx: List of nodes of which we want to know the error.
     """
