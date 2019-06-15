@@ -19,8 +19,8 @@ class Tensor:
     """
     def __init__(self, value=np.array([])):
         self.__value = value
-        self.shape = value.shape
-        self.rank = len(self.shape)
+        self.__shape = value.shape
+        self.__rank = len(self.__shape)
         # dict of {Tensor: (cache, func),
         #          Tensor: (cache, func)
         #          ...
@@ -38,7 +38,7 @@ class Tensor:
         # be reset by calling self.reset_grad().
         # To backpropagate from a node, its gradient first needs to be set to ones
         # by calling self.start_backprop_here().
-        self.grad = np.zeros(shape=self.shape)
+        self.grad = np.zeros(shape=self.__shape)
         # This boolean indicates whether the gradient is already calculated for this
         # Tensor. After differentiating it needs to be reset by calling self.set_undone().
         self._done = False
@@ -46,6 +46,18 @@ class Tensor:
     @property
     def value(self):
         return self.__value
+
+    @value.setter
+    def value(self, value):
+        self.__value = value
+
+    @property
+    def shape(self):
+        return self.__shape
+
+    @property
+    def rank(self):
+        return self.__rank
 
     @property
     def done(self):
@@ -201,6 +213,15 @@ class Tensor:
 
     def __repr__(self):
         return str(self.value)
+
+
+@placeholder
+class TensorGroup:
+    """
+    This class implements a group of Tensors
+    with shared value and grad. Can be used
+    for models with loops (e.g. RNNs)
+    """
 
 
 def derive(dF, dx):

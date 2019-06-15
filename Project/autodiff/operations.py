@@ -8,10 +8,11 @@ import numpy as np
 
 # Project files
 from autodiff.tensor import Tensor
-from autodiff.devtools import unstable, placeholder
+from autodiff.devtools import unstable, placeholder, log
 
 
-def sum(tensor, axis):
+@log
+def sum(tensor, axis=None):
     """
     Sums the array over the specified axis.
     Dimension stays the same.
@@ -27,32 +28,85 @@ def sum(tensor, axis):
 
 
 @unstable
-def batch_matmul(x, y):
+@log
+def mean(tensor, axis=None):
     """
-    Batch matmul.
+    This function calculates the average of a given Tensor
+    along the specified axes.
+    Keeps dimensions.
+    :param tensor: The Tensor object.
+    :param axis: int or tuple of ints.
+    :return: A Tensor object.
     """
-    result = Tensor(np.matmul(x.value, y.value))
-
-    # print(np.swapaxes(x.value.copy(), -1, -2).shape)
-
-    x.dependencies[result] = ({"local": np.swapaxes(y.value.copy(), -1, -2)}, lambda cache, from_above: np.sum(np.matmul(from_above, cache["local"]), axis=0))
-    # y.dependencies[result] = ({"local": np.swapaxes(x.value.copy(), -1, -2)}, lambda cache, from_above: np.sum(np.matmul(from_above, cache["local"]), axis=0))
+    result = Tensor(np.mean(tensor.value, axis=axis, keepdims=True))
+    if axis is not None:
+        fac = np.prod(np.array(tensor.shape)[np.array(list(axis))])
+    else:
+        fac = np.prod(np.array(tensor.shape))
+    tensor.dependencies[result] = (
+    {"shape": tensor.shape, "fac": fac}, lambda cache, from_above: np.broadcast_to(from_above, shape=cache["shape"]) / fac)
 
     return result
 
 
-@placeholder
-def average(x, axis=None):
+@unstable
+@log
+def matmul(tensor_a, tensor_b):
     """
-    This function calculates the average of a given Tensor
-    along the specified axes.
-    :param x: The Tensor object.
-    :param axis: int or tuple of ints.
-    :return: A Tensor object.
+    Last 2 dimensions have to be valid for dot product,
+    all axis before that needs to match.
+    :param tensor_a:
+    :param tensor_b:
     """
+    result = Tensor(np.matmul(tensor_a.value, tensor_b.value))
+    tensor_a.dependencies[result] = ({"local": np.swapaxes(tensor_b.value.copy(), -1, -2)}, lambda cache, from_above: np.matmul(from_above, cache["local"]))
+    tensor_b.dependencies[result] = ({"local": np.swapaxes(tensor_a.value.copy(), -1, -2)}, lambda cache, from_above: np.matmul(cache["local"], from_above))
+
+    return result
 
 
 @unstable
+@log
+def tile_leading_dims(tensor, leading_dims):
+    """
+    This function will broadcast up the specified tensor by
+    tiling leading_dims dimensions in the first axes.
+    example:
+    tensor = [
+                [1, 2, 3],
+                [4, 5, 6]
+            ]
+
+            tensor.shape = (2, 3)
+            ops.tile_leading_dims(tensor, leading_dims=(2))
+            =
+            [
+            [
+                [1, 2, 3],
+                [4, 5, 6]
+            ],
+
+            [
+                [1, 2, 3],
+                [4, 5, 6]
+            ]
+            ]
+
+            tensor.shape = (2, 2, 3)
+    :param tensor: Tensor object to be broadcasted.
+    :param leading_dims: int or tuple of ints, specifying
+    the number of entries at the leading dimensions.
+    :return New Tensor object.
+
+    """
+    result = Tensor(np.broadcast_to(tensor.value, (leading_dims,)+tensor.shape))
+    tensor.dependencies[result] = ({"sum_axis": tuple(range(len((leading_dims,))))}, lambda cache, from_above: np.sum(from_above, axis=cache["sum_axis"]))
+
+    return result
+
+
+@unstable
+@log
 def reshape(x, newshape):
     """
     Reshapes the given Tensor to the specified shape.
@@ -67,38 +121,9 @@ def reshape(x, newshape):
 
 
 @placeholder
-def upcast(x, *args):
-    """
-    Casting a 2D array to 3/4D by tiling along first dimensions.
-    :param x: Tensor.
-    :param args: how to upcast
-    :return:
-    """
-
-
-@placeholder
-def collapse(x, *args):
-    """
-    Inverse of upcast.
-    :param x: Tensor
-    :param args: how to collapse
-    :return:
-    """
-
-
-@placeholder
 def exp(x):
     """
     e ^ Tensor
     :param x: Tensor.
-    :return:
-    """
-
-
-@placeholder
-def squeeze(tensor):
-    """
-    Removes extra dimensions.
-    :param tensor: Tensor object.
     :return:
     """

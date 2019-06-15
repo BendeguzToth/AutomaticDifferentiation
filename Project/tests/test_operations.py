@@ -285,3 +285,22 @@ class TestOps(TestCase):
                 [42, 42]
             ]
         ])))
+
+        a.reset_all()
+        axsNone = ops.sum(a)
+        self.assertTrue(np.array_equal(axsNone.value, np.array([[[79]]])))
+        axsNone.grad = np.array([[[42]]])
+        a.backprop()
+        self.assertTrue(np.array_equal(a.grad, np.array([
+            [
+                [42, 42],
+                [42, 42],
+                [42, 42]
+            ],
+
+            [
+                [42, 42],
+                [42, 42],
+                [42, 42]
+            ]
+        ])))
