@@ -23,7 +23,7 @@ def undecorate(func):
 
 
 @undecorate
-def log(func):
+def logging(func):
     """
     Decorator.
     Logs every function call.

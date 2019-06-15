@@ -7,7 +7,7 @@ the main building block of the autodiff module.
 import numpy as np
 
 # Project files
-from autodiff.devtools import placeholder, unstable, log
+from autodiff.devtools import placeholder, unstable, logging
 
 
 class Tensor:
@@ -29,7 +29,7 @@ class Tensor:
         # pass dependent on this node. local_gradient is the gradient
         # of the Tensor object with respect to self, and func is a callable
         # that takes two arguments (cache, from_above) to calculate the gradient
-        # of the final node with respect to self. cache is a log dict,
+        # of the final node with respect to self. cache is a logging dict,
         # from_above is the gradient at Tensor.
         # Call self.clear_dependencies() to clear.
         self.dependencies = {}
@@ -134,69 +134,159 @@ class Tensor:
     def __copy__(self):
         return Tensor(self.value.copy())
 
+    def __len__(self):
+        return self.value.__len__()
+
+    @unstable
+    def __neg__(self):
+        """
+        Implements the '-' operator in front of the
+        Tensor.
+        :return: New Tensor object.
+        """
+        result = Tensor(-self.__value)
+        self.dependencies[result] = ({"local": -np.ones(shape=self.shape)}, lambda cache, from_above: cache["local"] * from_above)
+
+        return result
+
+    @unstable
     def __add__(self, other):
         """
         Element-wise add with to another Tensor.
         :param other: Tensor object, with same shape as self.
         :return: The result of the operation.
         """
-        assert type(other) is Tensor, "Tensor object can only interact with other Tensor objects."
+        if type(other) is Tensor:
+            result = Tensor(self.value + other.value)
+            self.dependencies[result] = ({"local": np.ones(shape=self.shape)}, lambda cache, from_above: cache["local"] * from_above)
+            other.dependencies[result] = ({"local": np.ones(shape=other.shape)}, lambda cache, from_above: cache["local"] * from_above)
 
-        result = Tensor(self.value + other.value)
-        self.dependencies[result] = ({"local": np.ones(shape=self.shape)}, lambda cache, from_above: cache["local"] * from_above)
-        other.dependencies[result] = ({"local": np.ones(shape=other.shape)}, lambda cache, from_above: cache["local"] * from_above)
+            return result
+        elif type(other) is int or type(other) is float:
+            result = Tensor(self.value + other)
+            self.dependencies[result] = ({"local": np.ones(shape=self.shape)}, lambda cache, from_above: cache["local"] * from_above)
 
-        return result
+            return result
 
+        else:
+            raise Exception(f"Tensor.__add__(self, other) is only implemented with numeric and Tensor,"
+                            f" not with {type(other)}")
+
+    @unstable
+    def __radd__(self, other):
+        return self.__add__(other)
+
+    @unstable
     def __sub__(self, other):
         """
-        Element-wise subtraction of two Tensor objects.
-        self - other
-        :param other: Tensor object.
+        Element-wise subtraction of two Tensor objects, or with numeric.
+        :param other: Tensor object or numeric.
         :return: The element-wise difference of the objects.
         """
-        assert type(other) is Tensor, "Tensor object can only interact with other Tensor objects."
+        if type(other) is Tensor:
+            result = Tensor(self.value - other.value)
+            self.dependencies[result] = ({"local": np.ones(shape=self.shape)}, lambda cache, from_above: cache["local"] * from_above)
+            other.dependencies[result] = ({"local": -np.ones(shape=self.shape)}, lambda cache, from_above: cache["local"] * from_above)
 
-        result = Tensor(self.value - other.value)
+            return result
+
+        elif type(other) is int or type(other) is float:
+            result = Tensor(self.__value - other)
+            self.dependencies[result] = ({"local": np.ones(shape=self.shape)}, lambda cache, from_above: cache["local"] * from_above)
+
+            return result
+
+        else:
+            raise Exception(f"Tensor.__sub__(self, other) is only implemented with numeric and Tensor,"
+                            f" not with {type(other)}")
+
+    @unstable
+    def __rsub__(self, other):
+        result = Tensor(other - self.__value)
         self.dependencies[result] = ({"local": np.ones(shape=self.shape)}, lambda cache, from_above: cache["local"] * from_above)
-        other.dependencies[result] = ({"local": -np.ones(shape=self.shape)}, lambda cache, from_above: cache["local"] * from_above)
 
         return result
 
-    @log
+    @unstable
+    @logging
     def __mul__(self, other):
         """
-        Element-wise multiplication of two Tensor objects.
-        :param other: Tensor object.
-        :return: The element-wise product of the two tensor objects.
+        Element-wise multiplication with Tensor object or numeric.
+        :param other: Tensor object or in or float.
+        :return: The element-wise product.
         """
-        assert type(other) is Tensor, "Tensor object can only interact with other Tensor objects."
+        if type(other) is Tensor:
+            result = Tensor(self.value * other.value)
+            self.dependencies[result] = ({"local": other.value.copy()}, lambda cache, from_above: cache["local"] * from_above)
+            other.dependencies[result] = ({"local": self.value.copy()}, lambda cache, from_above: cache["local"] * from_above)
 
-        result = Tensor(self.value * other.value)
-        self.dependencies[result] = ({"local": other.value.copy()}, lambda cache, from_above: cache["local"] * from_above)
-        other.dependencies[result] = ({"local": self.value.copy()}, lambda cache, from_above: cache["local"] * from_above)
+            return result
+        elif type(other) is int or type(other) is float:
+            result = Tensor(other * self.value)
+            self.dependencies[result] = ({"local": np.full(shape=self.shape, fill_value=other)},
+                                         lambda cache, from_above: cache["local"] * from_above)
+
+            return result
+        else:
+            raise Exception(f"Tensor.__mul__(self, other) is only implemented with numeric and Tensor,"
+                            f" not with {type(other)}")
+
+    @unstable
+    @logging
+    def __truediv__(self, other):
+        """
+        Implements the '/' operator.
+        :param other: Numeric or Tensor.
+        :return: New Tensor object.
+        """
+        if type(other) is int or type(other) is float:
+            result = Tensor(self.__value / other)
+            self.dependencies[result] = ({"local": np.full(shape=self.shape, fill_value=1 / other)}, lambda cache, from_above: cache["local"] * from_above)
+
+            return result
+
+        elif type(other) is Tensor:
+            result = Tensor(self.__value / other.value)
+            self.dependencies[result] = ({"local": 1 / other.value}, lambda cache, from_above: cache["local"] * from_above)
+
+            return result
+
+        else:
+            raise Exception(f"Tensor.__truediv__(self, other) is only implemented with numeric and Tensor,"
+                            f" not with {type(other)}")
+
+    @unstable
+    def __rtruediv__(self, other):
+        """
+        Implements the '/' operator.
+        Tensor / Tensor cases are handled in Tensor.__truediv__,
+        here we only handle numeric / Tensor.
+        :param other: Numeric.
+        :return: New Tensor object.
+        """
+        assert type(other) is float or type(other) is int
+
+        result = Tensor(other / self.__value)
+        self.dependencies[result] = ({"local": - other / (self.__value ** 2)}, lambda cache, from_above: cache["local"] * from_above)
 
         return result
 
+    @unstable
     def __rmul__(self, other):
-        """
-        Multiply with scalar.
-        :param other: int or float.
-        :return: The product of the multiplication.
-        """
-        assert type(other) is int or type(other) is float, "Left side of multiplication operand of Tensor must be a numeric value"
+        return self.__mul__(other)
 
-        result = Tensor(other * self.value)
-        self.dependencies[result] = ({"local": np.full(shape=self.shape, fill_value=other)}, lambda cache, from_above: cache["local"] * from_above)
-
-        return result
-
+    @unstable
     def __pow__(self, power):
         result = Tensor(self.value ** power)
         self.dependencies[result] = ({"local": power * self.value ** (power-1)}, lambda cache, from_above: cache["local"] * from_above)
 
         return result
 
+    @placeholder
+    def __rpow__(self, other):
+        pass
+
+    @unstable
     def __matmul__(self, other):
         """
         Implements matrix multiply for 2D tensors.
@@ -235,3 +325,45 @@ def derive(dF, dx):
     dF.start_backprop_here()
     for candidate in dx:
         candidate.backprop()
+
+
+@placeholder
+def collapse_grad(tensor, nr_leading_dims):
+    """
+    Call this function on a Tensor object to collapse its gradient
+    down by ignoring some number of leading dimensions.
+    :param tensor:
+    :param nr_leading_dims:
+    :return:
+    """
+
+
+def xavier_tensor(shape):
+    """
+    This function initializes a Tensor with the given shape
+    using the Xavier initialization. Last dim is normalized.
+    :param shape: The shape of the Tensor.
+    :return: Tensor object with the specified shape.
+    """
+    return Tensor(np.random.randn(*shape) / np.sqrt((shape[-1])))
+
+
+def xavier_relu_tensor(shape):
+    """
+    This function initializes a Tensor with the given shape
+    using the Xavier initialization for ReLU.. Last dim is
+    normalized.
+    :param shape: The shape of the Tensor.
+    :return: Tensor object with the specified shape.
+    """
+    return Tensor(np.random.randn(*shape) / np.sqrt((shape[-1] / 2)))
+
+
+def unit_normal_tensor(shape):
+    """
+    Returns a Tensor with the specified shape, where all values
+    are drawn from a unit gaussian distribution.
+    :param shape: Shape of the Tensor.
+    :return: Unit gaussian Tensor object with the specified shape.
+    """
+    return Tensor(np.random.randn(*shape))

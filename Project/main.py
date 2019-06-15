@@ -37,8 +37,7 @@ def test():
         x, y = xy()
 
         out = ops.matmul(ops.tile_leading_dims(w, 10), x) + ops.tile_leading_dims(b, 10)
-        print(ops.mean())
-        loss = 0.5 * ops.mean(ops.sum((y - out) ** 2, axis=(1, 2)))
+        loss = 0.5 * ops.average(ops.sum((y - out) ** 2, axis=(1, 2)))
 
         print("Epoch {} Loss {}".format(i, loss))
 

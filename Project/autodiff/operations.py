@@ -1,5 +1,5 @@
 """
-This file contains basic mathematical operations
+This file contains atomic mathematical operations
 for Tensor objects.
 """
 
@@ -8,10 +8,10 @@ import numpy as np
 
 # Project files
 from autodiff.tensor import Tensor
-from autodiff.devtools import unstable, placeholder, log
+from autodiff.devtools import unstable, placeholder, logging
 
 
-@log
+@logging
 def sum(tensor, axis=None):
     """
     Sums the array over the specified axis.
@@ -28,8 +28,8 @@ def sum(tensor, axis=None):
 
 
 @unstable
-@log
-def mean(tensor, axis=None):
+@logging
+def average(tensor, axis=None):
     """
     This function calculates the average of a given Tensor
     along the specified axes.
@@ -50,7 +50,7 @@ def mean(tensor, axis=None):
 
 
 @unstable
-@log
+@logging
 def matmul(tensor_a, tensor_b):
     """
     Last 2 dimensions have to be valid for dot product,
@@ -66,7 +66,7 @@ def matmul(tensor_a, tensor_b):
 
 
 @unstable
-@log
+@logging
 def tile_leading_dims(tensor, leading_dims):
     """
     This function will broadcast up the specified tensor by
@@ -106,24 +106,43 @@ def tile_leading_dims(tensor, leading_dims):
 
 
 @unstable
-@log
-def reshape(x, newshape):
+@logging
+def reshape(tensor, newshape):
     """
     Reshapes the given Tensor to the specified shape.
     :param x: Tensor object.
     :param newshape: tuple of integers.
     :return: A Tensor object.
     """
-    result = Tensor(np.reshape(x.value, newshape))
+    result = Tensor(np.reshape(tensor.value, newshape))
 
-    x.dependencies[result] = ({"old_shape": x.shape}, lambda cache, from_above: np.reshape(from_above, cache["old_shape"]))
+    tensor.dependencies[result] = ({"old_shape": tensor.shape}, lambda cache, from_above: np.reshape(from_above, cache["old_shape"]))
     return result
 
 
-@placeholder
-def exp(x):
+@unstable
+@logging
+def exp(tensor):
     """
-    e ^ Tensor
-    :param x: Tensor.
-    :return:
+    e ^ tensor
+    :param tensor: Tensor.
+    :return: New Tensor object.
     """
+    result = Tensor(np.exp(tensor.value))
+    tensor.dependencies[result] = ({"local": result.value.copy()}, lambda cache, from_above: from_above * cache["local"])
+
+    return result
+
+
+@unstable
+@logging
+def ln(tensor):
+    """
+    ln(tensor) - natural logging of the tensor.
+    :param tensor: Tensor object.
+    :return: New Tensor object.
+    """
+    result = Tensor(np.log(tensor.value))
+    tensor.dependencies[result] = ({"local": 1 / tensor.value}, lambda cache, from_above: cache["local"] * from_above)
+
+    return result
