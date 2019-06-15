@@ -49,7 +49,7 @@ def average(tensor, axis=None):
     return result
 
 
-@unstable
+@placeholder
 @logging
 def matmul(tensor_a, tensor_b):
     """

@@ -54,7 +54,7 @@ class Layer:
 
     def __call__(self, batch):
         batch_size = len(batch)
-        z = ops.matmul(ops.tile_leading_dims(self.w, batch_size), batch) + ops.tile_leading_dims(self.b, batch_size)
+        z = ops.tile_leading_dims(self.w, batch_size) @ batch + ops.tile_leading_dims(self.b, batch_size)
         return utils.sigmoid(z)
 
     def update(self, lr):
@@ -69,11 +69,8 @@ hidden_layer = Layer(60, 784)
 output_layer = Layer(10, 60)
 
 for epoch in range(1, N_EPOCH):
-    counter = 1
     for data, label in generate_training_data(training_data, training_labels, BATCH_SIZE):
         loss = utils.elementwise_cross_entropy(output_layer(hidden_layer(data)), label)
-        # print(ops.reshape(ops.average(loss), (1,)).value)
-        counter += 1
 
         derive(loss, [hidden_layer.w, hidden_layer.b, output_layer.w, output_layer.b])
 

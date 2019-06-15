@@ -289,12 +289,14 @@ class Tensor:
     @unstable
     def __matmul__(self, other):
         """
-        Implements matrix multiply for 2D tensors.
-        :param other: Tensor object.
-        :return: Value after matrix multiplication.
+        Last 2 dimensions have to be valid for dot product,
+        all axis before that needs to match.
+        :param tensor_a:
+        :param tensor_b:
         """
-        result = Tensor(np.dot(self.value, other.value))
-        self.dependencies[result] = ({"local": other.value.copy().T}, lambda cache, from_above: np.dot(from_above, cache["local"]))
+        result = Tensor(np.matmul(self.value, other.value))
+        self.dependencies[result] = ({"local": np.swapaxes(other.value.copy(), -1, -2)}, lambda cache, from_above: np.matmul(from_above, cache["local"]))
+        other.dependencies[result] = ({"local": np.swapaxes(self.value.copy(), -1, -2)}, lambda cache, from_above: np.matmul(cache["local"], from_above))
 
         return result
 
