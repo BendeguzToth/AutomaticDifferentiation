@@ -48,14 +48,15 @@ N_EPOCH = 10
 
 
 class Layer:
-    def __init__(self, size, input_size):
+    def __init__(self, size, input_size, activation):
         self.w = xavier_tensor(shape=(size, input_size))
         self.b = unit_normal_tensor(shape=(size, 1))
+        self.activation = activation
 
     def __call__(self, batch):
         batch_size = len(batch)
         z = ops.tile_leading_dims(self.w, batch_size) @ batch + ops.tile_leading_dims(self.b, batch_size)
-        return utils.sigmoid(z)
+        return self.activation(z)
 
     def update(self, lr):
         self.w.value -= lr*self.w.grad
@@ -65,12 +66,12 @@ class Layer:
         self.b.reset_all()
 
 
-hidden_layer = Layer(60, 784)
-output_layer = Layer(10, 60)
+hidden_layer = Layer(60, 784, activation=utils.sigmoid)
+output_layer = Layer(10, 60, activation=utils.tanh)
 
 for epoch in range(1, N_EPOCH):
     for data, label in generate_training_data(training_data, training_labels, BATCH_SIZE):
-        loss = utils.elementwise_cross_entropy(output_layer(hidden_layer(data)), label)
+        loss = utils.MSE(output_layer(hidden_layer(data)), label)
 
         derive(loss, [hidden_layer.w, hidden_layer.b, output_layer.w, output_layer.b])
 
@@ -87,3 +88,46 @@ for epoch in range(1, N_EPOCH):
 
         print(f"Epoch {epoch} - Eval accuracy: {np.count_nonzero(result * label.value) / 10000}")
 
+
+# data = np.random.randn(2, 5, 1)
+# der = np.ones((2, 5, 1))
+#
+# class DenseSoftmax:
+#     """
+#     This class implements the softmax activation, with dense
+#     inflowing gradients. If the gradient of the loss with
+#     respect to this the layer is sparse (has only one non-zero
+#     element) consider using SparseSoftmax instead!
+#     """
+#     def activation(self, x):
+#         shiftx = x - np.max(x, axis=1, keepdims=True)
+#         exps = np.exp(shiftx)
+#         S = np.sum(exps, axis=1, keepdims=True)
+#         self.x = exps / S
+#         return self.x
+#
+#     def gradient(self, gradient_from_above):
+#         """
+#         Returns the gradient of a whole batch.
+#         :param gradient_from_above: 2D array of gradients.
+#         :return:
+#         """
+#         local_grad = np.matmul(-self.x, np.transpose(self.x, axes=(0, 2, 1))) * np.repeat(np.expand_dims(1 - np.identity(self.x.shape[1]), axis=0), self.x.shape[0], axis=0) + (1 - self.x) * self.x * np.repeat(np.expand_dims(np.identity(self.x.shape[1]), axis=0), self.x.shape[0], axis=0)
+#         return np.matmul(local_grad, gradient_from_above)
+
+
+# s = DenseSoftmax()
+# bm = s.activation(data)
+#
+# print(bm)
+#
+# t = Tensor(data)
+# out = utils.softmax(t)
+# print(out)
+#
+# ds = s.gradient(der)
+#
+# print(ds)
+#
+# derive(out, [t])
+# print(t)

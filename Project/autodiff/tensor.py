@@ -17,7 +17,7 @@ class Tensor:
     of Tensors can be differentiated automatically with
     respect to any of its (Tensor) parameters.
     """
-    def __init__(self, value=np.array([])):
+    def __init__(self, value=np.array([]), name=""):
         self.__value = value
         self.__shape = value.shape
         self.__rank = len(self.__shape)
@@ -42,6 +42,7 @@ class Tensor:
         # This boolean indicates whether the gradient is already calculated for this
         # Tensor. After differentiating it needs to be reset by calling self.set_undone().
         self._done = False
+        self.name = name
 
     @property
     def value(self):
@@ -248,6 +249,7 @@ class Tensor:
         elif type(other) is Tensor:
             result = Tensor(self.__value / other.value)
             self.dependencies[result] = ({"local": 1 / other.value}, lambda cache, from_above: cache["local"] * from_above)
+            other.dependencies[result] = ({"local": - self.value / (other.value ** 2)}, lambda cache, from_above: cache["local"] * from_above)
 
             return result
 
@@ -301,7 +303,7 @@ class Tensor:
         return result
 
     def __str__(self):
-        return "TENSOR with value: {}, gradient: {}".format(str(self.value), str(self.grad))
+        return "TENSOR {} with value:\n{}, gradient:\n{}".format(self.name, str(self.value), str(self.grad))
 
     def __repr__(self):
         return str(self.value)

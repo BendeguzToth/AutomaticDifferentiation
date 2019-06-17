@@ -51,16 +51,53 @@ def average(tensor, axis=None):
 
 @placeholder
 @logging
-def matmul(tensor_a, tensor_b):
+def max(tensor, axis=None):
     """
-    Last 2 dimensions have to be valid for dot product,
-    all axis before that needs to match.
-    :param tensor_a:
-    :param tensor_b:
+    This function returns the maximum elements along the specified axis.
+    :param tensor: Tensor object.
+    :param axis: The axis to take the max along.
+    :return: New Tensor object.
     """
-    result = Tensor(np.matmul(tensor_a.value, tensor_b.value))
-    tensor_a.dependencies[result] = ({"local": np.swapaxes(tensor_b.value.copy(), -1, -2)}, lambda cache, from_above: np.matmul(from_above, cache["local"]))
-    tensor_b.dependencies[result] = ({"local": np.swapaxes(tensor_a.value.copy(), -1, -2)}, lambda cache, from_above: np.matmul(cache["local"], from_above))
+
+
+
+@placeholder
+@logging
+def concatenate(tensor_a, tensor_b, axis):
+    """
+    Concatenates two tensors along the specified axis.
+    :param tensor_a: Tensor object.
+    :param tensor_b: Tensor object.
+    :param axis: The axis to concatenate along.
+    :return: New Tensor object.
+    """
+
+@placeholder
+@logging
+def split(tensor, axis):
+    """
+    Splits the tensor.
+    :param tensor:
+    :param axis:
+    :return:
+    """
+
+
+@unstable
+@logging
+def repeat(tensor, rep, axis):
+    """
+    This function tiles the vector along the given axis
+    'rep' times.
+    :param tensor: Tensor object.
+    :param rep: The number of repetition.
+    :param axis: Axis to tile along.
+    :return: New Tensor object.
+    """
+    new_shape = np.ones((tensor.rank,), dtype=int)
+    new_shape[axis] = rep
+    result = Tensor(np.tile(tensor.value, new_shape))
+    tensor.dependencies[result] = ({"axis":axis, "rep":rep}, lambda cache, from_above: np.sum(np.array(np.split(from_above, cache["rep"], cache["axis"])), axis=0))
 
     return result
 
