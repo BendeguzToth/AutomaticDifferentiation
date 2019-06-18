@@ -66,12 +66,12 @@ class Layer:
         self.b.reset_all()
 
 
-hidden_layer = Layer(60, 784, activation=utils.sigmoid)
-output_layer = Layer(10, 60, activation=utils.tanh)
+hidden_layer = Layer(60, 784, activation=utils.ReLU)
+output_layer = Layer(10, 60, activation=utils.softmax)
 
 for epoch in range(1, N_EPOCH):
     for data, label in generate_training_data(training_data, training_labels, BATCH_SIZE):
-        loss = utils.MSE(output_layer(hidden_layer(data)), label)
+        loss = utils.vector_cross_entropy(output_layer(hidden_layer(data)), label)
 
         derive(loss, [hidden_layer.w, hidden_layer.b, output_layer.w, output_layer.b])
 

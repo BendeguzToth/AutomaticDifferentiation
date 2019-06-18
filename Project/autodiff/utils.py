@@ -47,6 +47,17 @@ def softmax(tensor, axis=-2):
     return exps / S
 
 
+@unstable
+def ReLU(tensor):
+    """
+    This function implements the ReLU activation
+    function.
+    :param tensor: Tensor object.
+    :return: New Tensor object.
+    """
+    return ops.maximum(tensor, 0)
+
+
 def MSE(output, label):
     """
     This function implements mean squared error.

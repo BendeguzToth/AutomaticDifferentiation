@@ -1,14 +1,43 @@
 import numpy as np
-from autodiff.tensor import Tensor, derive
-from autodiff import utils, operations as ops
 
-tensor = Tensor(np.array([
-    [1.2],
-    [0.7],
-    [5.4]
-]))
+a = np.array([
+    [
+        [1, 3],
+        [8, 1]
+    ],
 
-out = utils.softmax(tensor)
-derive(out, [tensor])
+    [
+        [9, 2],
+        [7, 4]
+    ]
+])
 
-print(out)
+b = np.array([[
+    [
+        [1, 0],
+        [0, 1]
+    ]
+  ],
+
+
+  [
+      [
+          [0, 0],
+          [1, 1]
+      ]
+  ],
+
+
+  [
+      [
+          [0, 1],
+          [0, 1]
+      ]
+  ]])
+
+# print(b)
+# print("====")
+# print(np.argmax(a, axis=0))
+
+print(np.max(a, axis=1))
+

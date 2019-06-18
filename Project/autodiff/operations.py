@@ -51,13 +51,53 @@ def average(tensor, axis=None):
 
 @placeholder
 @logging
-def max(tensor, axis=None):
+def max(tensor, axis):
     """
     This function returns the maximum elements along the specified axis.
     :param tensor: Tensor object.
-    :param axis: The axis to take the max along.
+    :param axis: The axis to take the max along. int.
     :return: New Tensor object.
     """
+
+@unstable
+@logging
+def maximum(tensor, b):
+    """
+    Returns element-wise maximum of either two arrays or
+    an array and a numeric. First argument is preferred when
+    equal.
+    :param tensor: Tensor object.
+    :param b: Tensor or Union[int, float]
+    :return: Tensor object.
+    """
+    if type(b) is Tensor:
+        result = Tensor(np.where(tensor.value >= b.value, tensor.value, b.value))
+        tensor.dependencies[result] = ({"local": np.where(tensor.value >= b.value, 1, 0)}, lambda cache, from_above: cache["local"] * from_above)
+        b.dependencies[result] = ({"local": np.where(tensor.value >= b.value, 0, 1)}, lambda cache, from_above: cache["local"] * from_above)
+
+        return result
+    elif type(b) is int or type(b) is float:
+        result = Tensor(np.where(tensor.value >= b, tensor.value, b))
+        tensor.dependencies[result] = ({"local": np.where(tensor.value >= b, 1, 0)}, lambda cache, from_above: cache["local"] * from_above)
+
+        return result
+
+@placeholder
+@logging
+def transpose(tensor, permutation):
+    """
+    This function transposes the tensor to have the
+    specified permutation of axes.
+    :param tensor: Tensor object.
+    :param permutation: Int tuple with same length as rank of tensor.
+    The numbers in the tuple are the axes indexes, whose order
+    determines the new permutation. If we have a Tensor with shape
+    (10, 8, 12, 3), and permutation=(0, 2, 3, 1), it wiil have shape
+    (10, 12, 3, 8).
+    :return: New Tensor object.
+    """
+    result = Tensor(np.transpose(tensor.value, axes=permutation))
+
 
 
 
@@ -91,7 +131,7 @@ def repeat(tensor, rep, axis):
     'rep' times.
     :param tensor: Tensor object.
     :param rep: The number of repetition.
-    :param axis: Axis to tile along.
+    :param axis: Axis to tile along. int.
     :return: New Tensor object.
     """
     new_shape = np.ones((tensor.rank,), dtype=int)
