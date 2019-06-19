@@ -6,23 +6,26 @@ For development purposes.
 from functools import wraps
 import logging
 
-# Macros
-DEV_MODE = True
+# Project files
+import autodiff.constants as const
+
 LOGGER = logging.getLogger("autodiff_dev")
-ENABLE_DECORATORS = True
 
 
-def undecorate(func):
+def devmodeonly(func):
     """
-    Disables the decorator when ENABLE_DECORATORS is False.
+    Apply this decorator to your decorator to turn it
+    off when dev mode is False.
+    :param func:
+    :return:
     """
-    if ENABLE_DECORATORS:
+    if const.devmode:
         return func
     else:
         return lambda f: f
 
 
-@undecorate
+@devmodeonly
 def logging(func):
     """
     Decorator.
@@ -35,31 +38,22 @@ def logging(func):
     return inner
 
 
-@undecorate
+@devmodeonly
 def unstable(func):
     """
     Decorator.
-    If DEV_MODE is False, raises exception
-    on calling the function. Logs warning
-    on first call otherwise.
+    Logs warning on first call.
     """
-    if DEV_MODE:
-        @wraps(func)
-        def inner(*args, **kwargs):
-            if not inner.called:
-                inner.called = True
-                LOGGER.warning(f"Unstable function '{func.__module__}.{func.__name__}' called.")
-            return func(*args, **kwargs)
-        inner.called = False
-        return inner
-    else:
-        @wraps(func)
-        def inner(*args, **kwargs):
-            raise NotImplementedError(f"'{func.__module__}.{func.__name__}' is under development.")
-        return inner
+    @wraps(func)
+    def inner(*args, **kwargs):
+        if not inner.called:
+            inner.called = True
+            LOGGER.warning(f"Unstable function '{func.__module__}.{func.__name__}' called.")
+        return func(*args, **kwargs)
+    inner.called = False
+    return inner
 
 
-@undecorate
 def placeholder(func):
     """
     Decorator.

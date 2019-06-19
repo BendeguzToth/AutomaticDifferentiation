@@ -8,7 +8,7 @@ import numpy as np
 from examples.data.mnist_loader import load_data_wrapper
 
 import autodiff.utils as utils
-from autodiff.tensor import Tensor, derive, xavier_tensor, unit_normal_tensor
+from autodiff.tensor import Tensor, derive, xavier, unit_normal
 import autodiff.operations as ops
 from autodiff import devtools
 
@@ -49,8 +49,8 @@ N_EPOCH = 10
 
 class Layer:
     def __init__(self, size, input_size, activation):
-        self.w = xavier_tensor(shape=(size, input_size))
-        self.b = unit_normal_tensor(shape=(size, 1))
+        self.w = xavier(shape=(size, input_size))
+        self.b = unit_normal(shape=(size, 1))
         self.activation = activation
 
     def __call__(self, batch):
@@ -66,10 +66,11 @@ class Layer:
         self.b.reset_all()
 
 
-hidden_layer = Layer(60, 784, activation=utils.ReLU)
+hidden_layer = Layer(60, 784, activation=utils.relu)
 output_layer = Layer(10, 60, activation=utils.softmax)
 
 for epoch in range(1, N_EPOCH):
+    # Training
     for data, label in generate_training_data(training_data, training_labels, BATCH_SIZE):
         loss = utils.vector_cross_entropy(output_layer(hidden_layer(data)), label)
 

@@ -10,6 +10,7 @@ import numpy as np
 from autodiff.tensor import Tensor
 import autodiff.operations as ops
 from autodiff.devtools import unstable, placeholder
+import autodiff.constants as const
 
 
 def sigmoid(tensor):
@@ -48,9 +49,9 @@ def softmax(tensor, axis=-2):
 
 
 @unstable
-def ReLU(tensor):
+def relu(tensor):
     """
-    This function implements the ReLU activation
+    This function implements the relu activation
     function.
     :param tensor: Tensor object.
     :return: New Tensor object.
@@ -58,7 +59,7 @@ def ReLU(tensor):
     return ops.maximum(tensor, 0)
 
 
-def MSE(output, label):
+def mse(output, label):
     """
     This function implements mean squared error.
     Sum is over the last 2 dimensions.
@@ -76,7 +77,7 @@ def elementwise_cross_entropy(output, label):
     :param label: Tensor object. The true value.
     :return: New Tensor object.
     """
-    return -(label * ops.ln(output)) + (1 - label) * ops.ln(1 - output + 1e-7)
+    return -(label * ops.ln(output)) + (1 - label) * ops.ln(1 - output + const.fuzz)
 
 
 def vector_cross_entropy(output, label):
@@ -87,4 +88,4 @@ def vector_cross_entropy(output, label):
     :param label: Tensor object. The true value.
     :return: New Tensor object.
     """
-    return - label * ops.ln(output + 1e-7)
+    return - label * ops.ln(output + const.fuzz)

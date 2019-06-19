@@ -1,6 +1,6 @@
 """
 This file contains the implementation of the Tensor class,
-the main building block of the autodiff module.
+the main building block of the selfdiff module.
 """
 
 # Third-party libraries
@@ -8,16 +8,17 @@ import numpy as np
 
 # Project files
 from autodiff.devtools import placeholder, unstable, logging
+import autodiff.constants as const
 
 
 class Tensor:
     """
     A wrapper class around np.ndarray, that keeps track
-    of its own gradients. An arbitrary function built out
+    of its own gradient. An arbitrary function built out
     of Tensors can be differentiated automatically with
     respect to any of its (Tensor) parameters.
     """
-    def __init__(self, value=np.array([]), name=""):
+    def __init__(self, value=np.array([])):
         self.__value = value
         self.__shape = value.shape
         self.__rank = len(self.__shape)
@@ -40,9 +41,8 @@ class Tensor:
         # by calling self.start_backprop_here().
         self.grad = np.zeros(shape=self.__shape)
         # This boolean indicates whether the gradient is already calculated for this
-        # Tensor. After differentiating it needs to be reset by calling self.set_undone().
+        # Tensor. After differentiating it needs to be reset by calling self.reset_done().
         self._done = False
-        self.name = name
 
     @property
     def value(self):
@@ -50,6 +50,8 @@ class Tensor:
 
     @value.setter
     def value(self, value):
+        self.__shape = value.shape
+        self.__rank = len(self.__shape)
         self.__value = value
 
     @property
@@ -80,7 +82,7 @@ class Tensor:
         self.grad = np.zeros(shape=self.shape)
         self._done = False
 
-    def set_undone(self):
+    def reset_done(self):
         """
         This function sets the 'done'boolean of the Tensor to False.
         It leaves 'dependencies' and 'grad' unchanged!
@@ -137,6 +139,9 @@ class Tensor:
 
     def __len__(self):
         return self.value.__len__()
+
+    def __getitem__(self, item):
+        return self.__value.__getitem__(item)
 
     @unstable
     def __neg__(self):
@@ -293,9 +298,8 @@ class Tensor:
         """
         Last 2 dimensions have to be valid for dot product,
         all axis before that needs to match.
-        :param tensor_a:
-        :param tensor_b:
         """
+        assert self.shape[:-2] == other.shape[:-2]
         result = Tensor(np.matmul(self.value, other.value))
         self.dependencies[result] = ({"local": np.swapaxes(other.value.copy(), -1, -2)}, lambda cache, from_above: np.matmul(from_above, cache["local"]))
         other.dependencies[result] = ({"local": np.swapaxes(self.value.copy(), -1, -2)}, lambda cache, from_above: np.matmul(cache["local"], from_above))
@@ -303,7 +307,7 @@ class Tensor:
         return result
 
     def __str__(self):
-        return "TENSOR {} with value:\n{}, gradient:\n{}".format(self.name, str(self.value), str(self.grad))
+        return "TENSOR with shape: {} \nvalue:\n{},\ngradient:\n{}".format(self.shape, str(self.value), str(self.grad))
 
     def __repr__(self):
         return str(self.value)
@@ -331,18 +335,53 @@ def derive(dF, dx):
         candidate.backprop()
 
 
-@placeholder
-def collapse_grad(tensor, nr_leading_dims):
+def tensor(array, dtype=const.dtype):
     """
-    Call this function on a Tensor object to collapse its gradient
-    down by ignoring some number of leading dimensions.
-    :param tensor:
-    :param nr_leading_dims:
-    :return:
+    Convenience method for creating a Tensor like a numpy
+    array.
+    :param array: List.
+    :param dtype: Data type of the array.
+    :return: A Tensor object with the specified
+    value.
     """
+    return Tensor(np.array(array, dtype=dtype))
 
 
-def xavier_tensor(shape):
+def zeros(shape, dtype=const.dtype):
+    """
+    Convenience method for creating Tensor like
+    numpy zeros.
+    :param shape: Shape of the Tensor.
+    :param dtype: Data type of tensor.
+    :return: New Tensor object.
+    """
+    return Tensor(np.zeros(shape, dtype=dtype))
+
+
+def ones(shape, dtype=const.dtype):
+    """
+    Convenience method for creating Tensor like
+    numpy ones.
+    :param shape: Shape of the Tensor.
+    :param dtype: Data type of tensor.
+    :return: New Tensor object.
+    """
+    return Tensor(np.ones(shape, dtype=dtype))
+
+
+def constant(shape, value, dtype=const.dtype):
+    """
+    This function returns a Tensor of the given shape,
+    where all elements are equal to the given value.
+    :param shape: Shape of the Tensor.
+    :param value: Constant to fill with.
+    :param dtype: Data type of the Tensor.
+    :return: New Tensor object.
+    """
+    return np.full(shape, value, dtype=dtype)
+
+
+def xavier(shape):
     """
     This function initializes a Tensor with the given shape
     using the Xavier initialization. Last dim is normalized.
@@ -352,10 +391,10 @@ def xavier_tensor(shape):
     return Tensor(np.random.randn(*shape) / np.sqrt((shape[-1])))
 
 
-def xavier_relu_tensor(shape):
+def xavier_relu(shape):
     """
     This function initializes a Tensor with the given shape
-    using the Xavier initialization for ReLU.. Last dim is
+    using the Xavier initialization for relu.. Last dim is
     normalized.
     :param shape: The shape of the Tensor.
     :return: Tensor object with the specified shape.
@@ -363,7 +402,7 @@ def xavier_relu_tensor(shape):
     return Tensor(np.random.randn(*shape) / np.sqrt((shape[-1] / 2)))
 
 
-def unit_normal_tensor(shape):
+def unit_normal(shape):
     """
     Returns a Tensor with the specified shape, where all values
     are drawn from a unit gaussian distribution.
@@ -371,3 +410,14 @@ def unit_normal_tensor(shape):
     :return: Unit gaussian Tensor object with the specified shape.
     """
     return Tensor(np.random.randn(*shape))
+
+
+def tensor_equal(tensor1, tensor2):
+    """
+    Returns whether the values of the two
+    tensors are (element wise) equal.
+    :param tensor1: Tensor object.
+    :param tensor2: Tensor object.
+    :return: bool
+    """
+    return np.array_equal(tensor1.value, tensor2.value)

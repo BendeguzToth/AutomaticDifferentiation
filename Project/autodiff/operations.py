@@ -15,7 +15,7 @@ from autodiff.devtools import unstable, placeholder, logging
 def sum(tensor, axis=None):
     """
     Sums the array over the specified axis.
-    Dimension stays the same.
+    Keeps dimensions.
     :param tensor: Tensor object.
     :param axis: int or tuple of ints, axis to
     be summed over.
@@ -40,6 +40,8 @@ def average(tensor, axis=None):
     """
     result = Tensor(np.mean(tensor.value, axis=axis, keepdims=True))
     if axis is not None:
+        if type(axis) is int:
+            axis = (axis,)
         fac = np.prod(np.array(tensor.shape)[np.array(list(axis))])
     else:
         fac = np.prod(np.array(tensor.shape))
@@ -82,7 +84,7 @@ def maximum(tensor, b):
 
         return result
 
-@placeholder
+
 @logging
 def transpose(tensor, permutation):
     """
@@ -92,25 +94,50 @@ def transpose(tensor, permutation):
     :param permutation: Int tuple with same length as rank of tensor.
     The numbers in the tuple are the axes indexes, whose order
     determines the new permutation. If we have a Tensor with shape
-    (10, 8, 12, 3), and permutation=(0, 2, 3, 1), it wiil have shape
+    (10, 8, 12, 3), and permutation=(0, 2, 3, 1), it will have shape
     (10, 12, 3, 8).
     :return: New Tensor object.
     """
     result = Tensor(np.transpose(tensor.value, axes=permutation))
+    back_perm = np.zeros((tensor.rank,), dtype=int)
+    back_perm[np.array(list(permutation))] = np.arange(tensor.rank)
+    tensor.dependencies[result] = ({"back_perm": back_perm}, lambda cache, from_above: np.transpose(from_above, axes=cache["back_perm"]))
+
+    return result
 
 
-
-
-@placeholder
+@unstable
 @logging
-def concatenate(tensor_a, tensor_b, axis):
+def swap_axis(tensor, ax1, ax2):
     """
-    Concatenates two tensors along the specified axis.
-    :param tensor_a: Tensor object.
-    :param tensor_b: Tensor object.
-    :param axis: The axis to concatenate along.
+    Swaps the specified axis of tensor.
+    :param tensor: Tensor object.
+    :param ax1: Axis to swap.
+    :param ax2: Axis to swap.
     :return: New Tensor object.
     """
+    result = Tensor(np.swapaxes(tensor.value, ax1, ax2))
+    tensor.dependencies[result] = ({"axis": (ax1, ax2)}, lambda cache, from_above: np.swapaxes(from_above, *cache["axis"]))
+
+    return result
+
+
+@logging
+def concatenate(tensors, axis):
+    """
+    Concatenates all tensors in 'tensors'. All of them must have the
+    same dimensions, except along 'axis'.
+    :param tensors: List of Tensor objects to concatenate.
+    :param axis: Axis to concatenate along.
+    :return: New Tensor object.
+    """
+    result = Tensor(np.concatenate([x.value for x in tensors], axis))
+    running_sum = 0
+    for tensor in tensors:
+        tensor.dependencies[result] = ({"index": tuple([slice(None,) for _ in range(axis)] + [slice(running_sum,running_sum + tensor.shape[axis])])}, lambda cache, from_above: from_above[cache["index"]])
+        running_sum += tensor.shape[axis]
+    return result
+
 
 @placeholder
 @logging
@@ -176,7 +203,13 @@ def tile_leading_dims(tensor, leading_dims):
     :return New Tensor object.
 
     """
-    result = Tensor(np.broadcast_to(tensor.value, (leading_dims,)+tensor.shape))
+    if type(leading_dims) is int:
+        shape = (leading_dims,)+tensor.shape
+    elif type(leading_dims) is tuple:
+        shape = leading_dims + tensor.shape
+    else:
+        raise Exception(f"Argument 'leading dims' in operations.tile_leading_dims(tensor, leading_dims) should be of type in or tuple, not type {type(leading_dims)}")
+    result = Tensor(np.broadcast_to(tensor.value, shape))
     tensor.dependencies[result] = ({"sum_axis": tuple(range(len((leading_dims,))))}, lambda cache, from_above: np.sum(from_above, axis=cache["sum_axis"]))
 
     return result
