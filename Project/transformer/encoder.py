@@ -1,5 +1,5 @@
 import autodiff.constants as const
-# const.devmode = False
+const.devmode = False
 
 import numpy as np
 import math
@@ -23,8 +23,8 @@ class LayerNorm:
         batch_size = x.shape[0]
         feature_len = x.shape[1]
         seq_len = x.shape[2]
-        mean = ops.repeat(ops.average(x, axis=2), seq_len, axis=2)
-        var = ops.repeat(ops.variance(x, axis=2), seq_len, axis=2)
+        mean = ops.repeat(ops.average(x, axis=1), feature_len, axis=1)
+        var = ops.repeat(ops.variance(x, axis=1), feature_len, axis=1)
 
         core = (x - mean) / ops.sqrt(var + const.fuzz)
 
@@ -232,10 +232,15 @@ class MHA:
 
 mha = MHA(n_heads=8, embedding_length=16, qk_length=8, v_length=16)
 
-tensor = tn.unit_normal((1, 8, 5))
+tensor = tn.tensor( [[[2.1, 3.3, 9.5],
+                    [0.6, -1.2, -0.4],
+                    [0.8, -2.0, 1.1],
+                    [4.5, -0.0, 2.7]]],
+                    dtype="float32"
+                   )
 
 ln = LayerNorm()
 
 res = ln(tensor)
-print(res)
-print(np.average(res.value, axis=2))
+print(res.value)
+print(np.average(res.value, axis=1))
