@@ -27,7 +27,6 @@ def sum(tensor, axis=None):
     return result
 
 
-@unstable
 @logging
 def average(tensor, axis=None):
     """
@@ -49,6 +48,20 @@ def average(tensor, axis=None):
     {"shape": tensor.shape, "fac": fac}, lambda cache, from_above: np.broadcast_to(from_above, shape=cache["shape"]) / fac)
 
     return result
+
+
+@logging
+def variance(tensor, axis=-2):
+    """
+    This function calculates the variance of the Tensor along the specified
+    axis.
+    Keeps dimensions!
+    :param tensor: Tensor object.
+    :param axis: int.
+    :return: New Tensor object.
+    """
+    mean = repeat(average(tensor, axis=axis), tensor.shape[axis], axis)
+    return average((tensor - mean)**2, axis=axis)
 
 
 @placeholder
@@ -108,7 +121,7 @@ def transpose(tensor, permutation):
 
 @unstable
 @logging
-def swap_axis(tensor, ax1, ax2):
+def swap_axis(tensor, ax1=-2, ax2=-1):
     """
     Swaps the specified axis of tensor.
     :param tensor: Tensor object.
@@ -141,13 +154,15 @@ def concatenate(tensors, axis):
 
 @placeholder
 @logging
-def split(tensor, axis):
+def split(tensor, num, axis):
     """
-    Splits the tensor.
+
     :param tensor:
+    :param num:
     :param axis:
-    :return:
+    :return: List of tensors.
     """
+
 
 
 @unstable
@@ -227,6 +242,20 @@ def reshape(tensor, newshape):
     result = Tensor(np.reshape(tensor.value, newshape))
 
     tensor.dependencies[result] = ({"old_shape": tensor.shape}, lambda cache, from_above: np.reshape(from_above, cache["old_shape"]))
+    return result
+
+
+@unstable
+@logging
+def sqrt(tensor):
+    """
+    Element wise square root.
+    :param tensor: Tensor object.
+    :return: New Tensor object.
+    """
+    result = Tensor(np.sqrt(tensor.value))
+    tensor.dependencies[result] = ({"local": 1 / (2 * np.sqrt(tensor.value))}, lambda cache, from_above: cache["local"] * from_above)
+
     return result
 
 
