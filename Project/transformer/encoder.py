@@ -19,6 +19,9 @@ class LayerNorm:
         self.gamma = tn.tensor([1])
         self.beta = tn.tensor([0])
 
+    def vars(self):
+        return [self.gamma, self.beta]
+
     def __call__(self, x):
         batch_size = x.shape[0]
         feature_len = x.shape[1]
@@ -49,81 +52,38 @@ class PointWiseNN:
         self.__w2 = tn.xavier_relu((io_size, hidden_size))
         self.__b2 = tn.unit_normal((io_size, 1))
 
-    @property
-    def variables(self):
-        return self.__w1, self.__w2, self.__b1, self.__b2
+    def vars(self):
+        return [self.__w1, self.__w2, self.__b1, self.__b2]
 
     def __call__(self, x):
         """
         The forward pass of the network.
-        :param x: Batch of sequences of data.
-        Dimensions: batch_size, sequence_length, feature_size, 1.
+        :param x: Batch of sequences of data. (BxFxS)
         :return: Batch of sequences of column vectors of the same
         dim as x.
         """
-        w1, b1, w2, b2 = self.__tile_up(x.shape[:2])
+        w1, b1, w2, b2 = self.__tile_up(x.shape[0], x.shape[2])
         return w2 @ utils.relu(w1 @ x + b1) + b2
 
-    def __tile_up(self, leading_dims):
+    def __tile_up(self, batch_dim, sequence_dim):
         """
         This function tiles the variables along the batch and
         sequence axis, with the specified dimensions.
-        :param leading_dims: Leading dimensions to tile.
-        Tuple of (batch_size, seq_length)
-        :return: Tuple of tiled tensors [w1, b1, w2, b2]
+        :param batch_dim: Dimension along batch axis.
+        :param seq_dim: Dimension along sequence axis.
+        :return: Tuple of tiled tensors (w1, b1, w2, b2)
+        with the right shape.
         """
-        return (ops.tile_leading_dims(self.__w1, leading_dims), ops.tile_leading_dims(self.__b1, leading_dims),
-               ops.tile_leading_dims(self.__w2, leading_dims), ops.tile_leading_dims(self.__b2, leading_dims))
+        return ops.tile_leading_dims(self.__w1, batch_dim), ops.repeat(ops.tile_leading_dims(self.__b1, batch_dim), sequence_dim, axis=2),\
+               ops.tile_leading_dims(self.__w2, batch_dim), ops.repeat(ops.tile_leading_dims(self.__b2, batch_dim), sequence_dim, axis=2),
+        # return (ops.tile_leading_dims(self.__w1, leading_dims), ops.tile_leading_dims(self.__b1, leading_dims),
+        #        ops.tile_leading_dims(self.__w2, leading_dims), ops.tile_leading_dims(self.__b2, leading_dims))
 
 
 def lookahead_mask(size):
     mask = np.zeros((size, size))
     mask[np.triu_indices_from(mask, 1)] = 1
     return Tensor(mask)
-
-
-# def attention(q, k, v):
-#     """
-#     Attention.
-#     :param q: (dk, 1)
-#     :param k: (sequence, dk, 1)
-#     :param v: (sequence, dm, 1)
-#     :return:
-#     """
-#     # Smooth k to (sequence, features).
-#     k = ops.reshape(k, (k.shape[0], k.shape[1] * k.shape[2]))
-#     similarity = k @ q
-#     scaled = similarity / k.shape[-2]
-#     raw_scores = utils.softmax(scaled, axis=-2)
-#     return raw_scores
-
-
-
-
-class QKV:
-    def __init__(self, embedding_length, qk_length, v_length):
-        self.wq = tn.xavier((qk_length, embedding_length))
-        self.wk = tn.xavier((qk_length, embedding_length))
-        self.wv = tn.xavier((v_length, embedding_length))
-
-        self.dk = qk_length
-
-    def __call__(self, x):
-        """
-        This function calculates the q, k, v vectors for the provided
-        sequence.
-        :param x: Sequence of column vectors.
-        :return: Tuple of (q, k, v)
-        """
-        # Sequence length.
-        q = self.wq @ x
-        k = self.wk @ x
-        v = self.wv @ x
-        raw_scores = ops.swap_axis(k) @ q
-        scaled = raw_scores / math.sqrt(self.dk)
-        final_scores = utils.softmax(scaled)
-        return v @ final_scores
-
 
 def attention(q, k, v):
     """
@@ -136,7 +96,7 @@ def attention(q, k, v):
     raw_scores = ops.swap_axis(k) @ q
     scaled = raw_scores / math.sqrt(k.shape[0])
     final_scores = utils.softmax(scaled)
-    return final_scores, v @ final_scores
+    return v @ final_scores
 
 
 # k = tn.tensor([
@@ -173,7 +133,7 @@ class MHA:
         self.wv = tn.xavier((v_length * n_heads, embedding_length))
         self.wo = tn.xavier((embedding_length, n_heads * v_length))
 
-    def __call__(self, x):
+    def __call__(self, x, mask=None):
         """
         :param x: (BxFxS)
         :return:
@@ -188,7 +148,7 @@ class MHA:
         k = self.prepare_heads(k)
         v = self.prepare_heads(v)
 
-        attention = self.attention(q, k, v) # BxHxFxS
+        attention = self.attention(q, k, v, mask) # BxHxFxS
         attention = ops.swap_axis(attention, 1, 2) # (BxSxHxF)
         reshaped = ops.reshape(attention, (attention.shape[0], attention.shape[1]* attention.shape[2], attention.shape[3])) # (BxFxS)
         # final = ops.swap_axis(reshaped, 1, 2) # (BxSxF)
@@ -208,39 +168,120 @@ class MHA:
         :return:
         """
         bsf = ops.swap_axis(x, 1, 2)
-        bhsf = ops.reshape(bsf, (bsf.shape[0], bsf.shape[1], self.n_heads, -1))
-        return ops.swap_axis(bhsf, 1, 2) # (BxHxSxF)
+        bshf = ops.reshape(bsf, (bsf.shape[0], bsf.shape[1], self.n_heads, -1))
+        return ops.swap_axis(bshf, 1, 2) # (BxHxSxF)
 
     @staticmethod
-    def attention(q, k, v):
+    def attention(q, k, v, mask=None):
         """
         (BxHxSxF)
         :param q:
         :param k:
         :param v:
+        :param mask:
         :return:
         """
-        # raw_scores = ops.swap_axis(k) @ q           # fine
-        # scaled = raw_scores / math.sqrt(k.shape[-1])# should be ok
-        # final_scores = utils.softmax(scaled, -1)
-        # return v @ final_scores
-        raw_scores = k @ ops.swap_axis(q)  # fine
-        scaled = raw_scores / math.sqrt(k.shape[-1])  # should be ok
-        final_scores = utils.softmax(scaled, -1)
+
+        raw_scores = k @ ops.swap_axis(q)
+        scaled = raw_scores / math.sqrt(k.shape[3])
+        if mask is not None:
+            scaled += (mask * -1e9)
+        final_scores = utils.softmax(scaled)
         return ops.swap_axis(v) @ final_scores
 
 
-mha = MHA(n_heads=8, embedding_length=16, qk_length=8, v_length=16)
+class EncoderBlock:
+    """
+    NO DROPOUT YET!
+    """
+    def __init__(self, dmodel, n_heads, dqk, hidden_size):
+        self.mha = MHA(n_heads=n_heads, embedding_length=dmodel, qk_length=dqk, v_length=dmodel)
+        self.nn = PointWiseNN(hidden_size, dmodel)
 
-tensor = tn.tensor( [[[2.1, 3.3, 9.5],
-                    [0.6, -1.2, -0.4],
-                    [0.8, -2.0, 1.1],
-                    [4.5, -0.0, 2.7]]],
-                    dtype="float32"
-                   )
+        self.layernnomr1 = LayerNorm()
+        self.layernnomr2 = LayerNorm()
 
-ln = LayerNorm()
+    def vars(self):
+        return self.mha.vars() + self.nn.vars() + self.layernnomr1.vars() + self.layernnomr2.vars()
 
-res = ln(tensor)
-print(res.value)
-print(np.average(res.value, axis=1))
+    def __call__(self, x, mask):
+        attention_out = self.layernnomr1(self.mha(x, mask) + x)
+        return self.layernnomr2(self.nn(attention_out) + attention_out)
+
+
+data = tn.tensor([
+    [
+        [2, 8.0, 0.7, -1.6],
+        [-0.1, 0.5, 3.2, 4.],
+        [0.75, 1.1, 7.2, -5.]
+    ],
+
+
+    [
+        [1.7, 2.2, 0, 0],
+        [6.3, -1.5, 0, 0],
+        [-2.3, -0.7, 0, 0]
+    ]
+])
+
+mask = tn.tensor([
+[
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0]
+    ],
+
+
+    [
+        [0, 0, 1, 1],
+        [0, 0, 1, 1],
+        [0, 0, 1, 1]
+    ]
+])
+
+print(data.shape)
+eb = EncoderBlock(3, 8, 3, 5)
+res = eb(data, mask)
+print(res)
+
+# mha = MHA(n_heads=8, embedding_length=16, qk_length=8, v_length=16)
+#
+# tensor = tn.tensor( [[[2.1, 3.3, 9.5],
+#                     [0.6, -1.2, -0.4],
+#                     [0.8, -2.0, 1.1],
+#                     [4.5, -0.0, 2.7]]],
+#                     dtype="float32"
+#                    )
+# print(mha(tn.unit_normal((5, 16, 20))).shape)
+#
+#
+# q = tn.tensor([[[
+#     [0, 0, 10],
+#     [0, 10, 0],
+#     [10, 10, 0]
+# ]]])
+#
+# k = tn.tensor([[[
+#     [10,0,0],
+#     [0,10,0],
+#     [0,0,10],
+#     [0,0,10]
+# ]]])
+#
+# v = tn.tensor([[[
+#     [   1,0],
+#     [  10,0],
+#     [ 100,5],
+#     [1000,6]
+# ]]])
+#
+# res = MHA.attention(q, k, v)
+#
+# print(res)
+#
+# pnn = PointWiseNN(10, 8)
+#
+#
+# x = tn.unit_normal((2, 8, 50))
+#
+# print(pnn(x).shape)
