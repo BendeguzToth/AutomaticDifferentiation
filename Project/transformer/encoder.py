@@ -85,6 +85,7 @@ def lookahead_mask(size):
     mask[np.triu_indices_from(mask, 1)] = 1
     return Tensor(mask)
 
+
 def attention(q, k, v):
     """
     (FxS)
@@ -128,12 +129,15 @@ def attention(q, k, v):
 class MHA:
     def __init__(self, n_heads, embedding_length, qk_length, v_length):
         self.n_heads = n_heads
+        self.d_model = embedding_length
         self.wq = tn.xavier((qk_length * n_heads, embedding_length))
         self.wk = tn.xavier((qk_length * n_heads, embedding_length))
         self.wv = tn.xavier((v_length * n_heads, embedding_length))
         self.wo = tn.xavier((embedding_length, n_heads * v_length))
 
-    def __call__(self, x, mask=None):
+        self.w_padding_mask = tn.ones(self.wk.shape)
+
+    def __call__(self, x, padding_mask, mask=None):
         """
         :param x: (BxFxS)
         :return:
@@ -144,15 +148,17 @@ class MHA:
         k = ops.tile_leading_dims(self.wk, batch_size) @ x
         v = ops.tile_leading_dims(self.wv, batch_size) @ x
 
-        q = self.prepare_heads(q)
-        k = self.prepare_heads(k)
-        v = self.prepare_heads(v)
+        q = self.prepare_heads(q)  # (BxHxSxF)
+        k = self.prepare_heads(k)  # (BxHxSxF)
+        v = self.prepare_heads(v)  # (BxHxSxF)
 
-        attention = self.attention(q, k, v, mask) # BxHxFxS
+        padding_mask_4d = self.prepare_heads(ops.tile_leading_dims(self.w_padding_mask, batch_size) @ padding_mask) / self.d_model  # (BxHxSxF)
+
+        attention = self.attention(q, k, v, padding_mask_4d, mask) # BxHxFxS
         attention = ops.swap_axis(attention, 1, 2) # (BxSxHxF)
         reshaped = ops.reshape(attention, (attention.shape[0], attention.shape[1]* attention.shape[2], attention.shape[3])) # (BxFxS)
-        # final = ops.swap_axis(reshaped, 1, 2) # (BxSxF)
-        return ops.tile_leading_dims(self.wo, batch_size) @ reshaped
+
+        return (1 - padding_mask) * (ops.tile_leading_dims(self.wo, batch_size) @ reshaped)
 
     def vars(self):
         """
@@ -167,26 +173,27 @@ class MHA:
         :param x:
         :return:
         """
-        bsf = ops.swap_axis(x, 1, 2)
-        bshf = ops.reshape(bsf, (bsf.shape[0], bsf.shape[1], self.n_heads, -1))
+        bsf = ops.swap_axis(x, 1, 2) # (BxSxF)
+        bshf = ops.reshape(bsf, (bsf.shape[0], bsf.shape[1], self.n_heads, -1)) # (BxSxHxF)
         return ops.swap_axis(bshf, 1, 2) # (BxHxSxF)
 
     @staticmethod
-    def attention(q, k, v, mask=None):
+    def attention(q, k, v, padding_mask, mask=None):
         """
         (BxHxSxF)
         :param q:
         :param k:
         :param v:
         :param mask:
-        :return:
+        :return: (BxHxFxS)
         """
-
+        dqk = q.shape[3]
+        mask = padding_mask @ ops.swap_axis(tn.ones(q.shape)) / dqk
         raw_scores = k @ ops.swap_axis(q)
         scaled = raw_scores / math.sqrt(k.shape[3])
         if mask is not None:
             scaled += (mask * -1e9)
-        final_scores = utils.softmax(scaled)
+        final_scores = utils.softmax(scaled, axis=2)  # S
         return ops.swap_axis(v) @ final_scores
 
 
@@ -198,90 +205,65 @@ class EncoderBlock:
         self.mha = MHA(n_heads=n_heads, embedding_length=dmodel, qk_length=dqk, v_length=dmodel)
         self.nn = PointWiseNN(hidden_size, dmodel)
 
-        self.layernnomr1 = LayerNorm()
-        self.layernnomr2 = LayerNorm()
+        self.layernorm1 = LayerNorm()
+        self.layernorm2 = LayerNorm()
 
     def vars(self):
-        return self.mha.vars() + self.nn.vars() + self.layernnomr1.vars() + self.layernnomr2.vars()
+        return self.mha.vars() + self.nn.vars() + self.layernorm1.vars() + self.layernorm2.vars()
 
     def __call__(self, x, mask):
-        attention_out = self.layernnomr1(self.mha(x, mask) + x)
-        return self.layernnomr2(self.nn(attention_out) + attention_out)
+        attention_out = self.layernorm1(self.mha(x, mask) + x)
+        return self.layernorm2(self.nn(attention_out) + attention_out)
 
 
-data = tn.tensor([
+data = np.array([
     [
-        [2, 8.0, 0.7, -1.6],
-        [-0.1, 0.5, 3.2, 4.],
-        [0.75, 1.1, 7.2, -5.]
+        [0, 0, 0, 0, 0],
+        [0, 1, 1, 0, 0],
+        [1, 0, 0, 0, 0]
     ],
 
-
     [
-        [1.7, 2.2, 0, 0],
-        [6.3, -1.5, 0, 0],
-        [-2.3, -0.7, 0, 0]
-    ]
+        [1, 1, 0, 0, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0]
+    ],
 ])
 
-mask = tn.tensor([
-[
-        [0, 0, 0, 0],
-        [0, 0, 0, 0],
-        [0, 0, 0, 0]
+mask = np.array([
+    [
+        [0, 0, 0, 1, 1],
+        [0, 0, 0, 1, 1],
+        [0, 0, 0, 1, 1]
     ],
 
-
     [
-        [0, 0, 1, 1],
-        [0, 0, 1, 1],
-        [0, 0, 1, 1]
-    ]
+        [0, 0, 1, 1, 1],
+        [0, 0, 1, 1, 1],
+        [0, 0, 1, 1, 1]
+    ],
 ])
 
-print(data.shape)
-eb = EncoderBlock(3, 8, 3, 5)
-res = eb(data, mask)
+mha = MHA(2, 3, 3, 3)
+
+res = mha(tn.tensor(data), tn.tensor(mask))
+
 print(res)
 
-# mha = MHA(n_heads=8, embedding_length=16, qk_length=8, v_length=16)
-#
-# tensor = tn.tensor( [[[2.1, 3.3, 9.5],
-#                     [0.6, -1.2, -0.4],
-#                     [0.8, -2.0, 1.1],
-#                     [4.5, -0.0, 2.7]]],
-#                     dtype="float32"
-#                    )
-# print(mha(tn.unit_normal((5, 16, 20))).shape)
-#
-#
-# q = tn.tensor([[[
-#     [0, 0, 10],
-#     [0, 10, 0],
-#     [10, 10, 0]
-# ]]])
-#
-# k = tn.tensor([[[
-#     [10,0,0],
-#     [0,10,0],
-#     [0,0,10],
-#     [0,0,10]
-# ]]])
-#
-# v = tn.tensor([[[
-#     [   1,0],
-#     [  10,0],
-#     [ 100,5],
-#     [1000,6]
-# ]]])
-#
-# res = MHA.attention(q, k, v)
-#
-# print(res)
-#
-# pnn = PointWiseNN(10, 8)
-#
-#
-# x = tn.unit_normal((2, 8, 50))
-#
-# print(pnn(x).shape)
+other = tn.tensor([
+    [
+        [0, 0, 0],
+        [0, 1, 1],
+        [1, 0, 0]
+    ]
+])
+
+other_mask = tn.tensor([
+    [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]
+    ]
+])
+
+print(mha(other, other_mask))

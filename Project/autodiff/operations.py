@@ -9,6 +9,7 @@ import numpy as np
 # Project files
 from autodiff.tensor import Tensor
 from autodiff.devtools import unstable, placeholder, logging
+import autodiff.constants as const
 
 
 @logging
@@ -164,29 +165,32 @@ def split(tensor, num, axis):
     """
 
 
-
 @unstable
 @logging
-def repeat(tensor, rep, axis):
+def repeat(tensor, rep, axis, backward=const.sum):
     """
     This function tiles the vector along the given axis
     'rep' times.
     :param tensor: Tensor object.
     :param rep: The number of repetition.
     :param axis: Axis to tile along. int.
+    :param backward: Callable. Way of dealing with reducing
+    dimensions in backward pass. The 'real' gradient of the
+    operation is sum, but in some cases it might be desirable
+    to average instead.
     :return: New Tensor object.
     """
     new_shape = np.ones((tensor.rank,), dtype=int)
     new_shape[axis] = rep
     result = Tensor(np.tile(tensor.value, new_shape))
-    tensor.dependencies[result] = ({"axis":axis, "rep":rep}, lambda cache, from_above: np.sum(np.array(np.split(from_above, cache["rep"], cache["axis"])), axis=0))
+    tensor.dependencies[result] = ({"axis":axis, "rep":rep}, lambda cache, from_above: backward(np.array(np.split(from_above, cache["rep"], cache["axis"])), axis=0))
 
     return result
 
 
 @unstable
 @logging
-def tile_leading_dims(tensor, leading_dims):
+def tile_leading_dims(tensor, leading_dims, backward=const.sum):
     """
     This function will broadcast up the specified tensor by
     tiling leading_dims dimensions in the first axes.
@@ -215,6 +219,10 @@ def tile_leading_dims(tensor, leading_dims):
     :param tensor: Tensor object to be broadcasted.
     :param leading_dims: int or tuple of ints, specifying
     the number of entries at the leading dimensions.
+    :param backward: Callable. Way of dealing with reducing
+    dimensions in backward pass. The 'real' gradient of the
+    operation is sum, but in some cases it might be desirable
+    to average instead.
     :return New Tensor object.
 
     """
@@ -225,7 +233,7 @@ def tile_leading_dims(tensor, leading_dims):
     else:
         raise Exception(f"Argument 'leading dims' in operations.tile_leading_dims(tensor, leading_dims) should be of type in or tuple, not type {type(leading_dims)}")
     result = Tensor(np.broadcast_to(tensor.value, shape))
-    tensor.dependencies[result] = ({"sum_axis": tuple(range(len((leading_dims,))))}, lambda cache, from_above: np.sum(from_above, axis=cache["sum_axis"]))
+    tensor.dependencies[result] = ({"sum_axis": tuple(range(len((leading_dims,))))}, lambda cache, from_above: backward(from_above, axis=cache["sum_axis"]))
 
     return result
 
