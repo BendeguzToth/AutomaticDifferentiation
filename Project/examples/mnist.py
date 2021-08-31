@@ -3,6 +3,7 @@ In this file we show an example of the autodiff package
 by solving the MNIST dataset for handwritten digit classification.
 """
 
+import torchvision
 import numpy as np
 
 from examples.data.mnist_loader import load_data_wrapper
@@ -10,27 +11,25 @@ from examples.data.mnist_loader import load_data_wrapper
 import autodiff.utils as utils
 from autodiff.tensor import Tensor, derive, xavier, unit_normal
 import autodiff.operations as ops
-from autodiff import devtools
-
-devtools.ENABLE_DECORATORS = False
 
 
-# Helper functions for loading in the data.
-def loadData(file):
-    raw_data = load_data_wrapper(file)
-    return list(raw_data[0]), list(raw_data[1]), list(raw_data[2])
+# Loading data from torchvision.
+data = torchvision.datasets.MNIST("data/", download=True)
+x_ = data.train_data.numpy() / 255
+y_ = data.train_labels.numpy()
+labels = np.zeros(shape=(60000, 10), dtype=np.float32)
+labels[np.arange(60000), y_] = 1.
+
+x = np.reshape(x_, newshape=(60000, 784, 1))
+y = np.reshape(labels, newshape=(60000, 10, 1))
+
+training_data = x[:50000]
+training_labels = y[:50000]
+test_data = x[50000:]
+test_labels = y[50000:]
 
 
-training, evaluation, testing = loadData("data/mnist.pkl.gz")
-
-training_data = np.array(training[0])
-training_labels = np.array(training[1])
-
-test_data = np.array(testing[0])
-test_labels = np.array(testing[1])
-
-
-def generate_training_data(data, labels, batch_size):
+def generate_batches(data, labels, batch_size):
     """
     This generator will yield a training batch.
     :param data: Numpy array of the input data.
@@ -44,7 +43,7 @@ def generate_training_data(data, labels, batch_size):
 
 BATCH_SIZE = 100
 LEARNING_RATE = 0.01
-N_EPOCH = 10
+N_EPOCH = 50
 
 
 class Layer:
@@ -71,7 +70,7 @@ output_layer = Layer(10, 60, activation=utils.softmax)
 
 for epoch in range(1, N_EPOCH):
     # Training
-    for data, label in generate_training_data(training_data, training_labels, BATCH_SIZE):
+    for data, label in generate_batches(training_data, training_labels, BATCH_SIZE):
         loss = utils.vector_cross_entropy(output_layer(hidden_layer(data)), label)
 
         derive(loss, [hidden_layer.w, hidden_layer.b, output_layer.w, output_layer.b])
@@ -80,7 +79,7 @@ for epoch in range(1, N_EPOCH):
         output_layer.update(LEARNING_RATE)
 
     # Validating
-    for data, label in generate_training_data(test_data, test_labels, 10000):
+    for data, label in generate_batches(test_data, test_labels, 10000):
         out = output_layer(hidden_layer(data))
         idxs = np.reshape(np.argmax(out.value, axis=1), newshape=(10000,))
         result = np.zeros(shape=(10000, 10, 1))

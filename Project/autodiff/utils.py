@@ -9,7 +9,6 @@ import numpy as np
 # Project files
 from autodiff.tensor import Tensor
 import autodiff.operations as ops
-from autodiff.devtools import unstable, placeholder
 import autodiff.constants as const
 
 
@@ -24,7 +23,6 @@ def sigmoid(tensor):
     return 1 / (1 + ops.exp(-tensor))
 
 
-@unstable
 def tanh(tensor):
     """
     This function implements the tanh function
@@ -34,7 +32,6 @@ def tanh(tensor):
     return (ops.exp(2 * tensor) - 1) / (ops.exp(2 * tensor) + 1)
 
 
-@unstable
 def softmax(tensor, axis=-2):
     """
     This function implements softmax activation.
@@ -48,7 +45,6 @@ def softmax(tensor, axis=-2):
     return exps / S
 
 
-@unstable
 def relu(tensor):
     """
     This function implements the relu activation
@@ -83,7 +79,6 @@ def elementwise_cross_entropy(output, label):
 def vector_cross_entropy(output, label):
     """
     This function implements the cross-entropy loss.
-    This function implements neuron-wise cross-entropy loss.
     :param output: Tensor object. The expected value.
     :param label: Tensor object. The true value.
     :return: New Tensor object.

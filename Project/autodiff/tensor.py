@@ -1,13 +1,12 @@
 """
 This file contains the implementation of the Tensor class,
-the main building block of the selfdiff module.
+the main building block of the autodiff module.
 """
 
 # Third-party libraries
 import numpy as np
 
 # Project files
-from autodiff.devtools import placeholder, unstable, logging
 import autodiff.constants as const
 
 
@@ -22,6 +21,7 @@ class Tensor:
         self.__value = value
         self.__shape = value.shape
         self.__rank = len(self.__shape)
+
         # dict of {Tensor: (cache, func),
         #          Tensor: (cache, func)
         #          ...
@@ -143,7 +143,6 @@ class Tensor:
     def __getitem__(self, item):
         return self.__value.__getitem__(item)
 
-    @unstable
     def __neg__(self):
         """
         Implements the '-' operator in front of the
@@ -155,7 +154,6 @@ class Tensor:
 
         return result
 
-    @unstable
     def __add__(self, other):
         """
         Element-wise add with to another Tensor.
@@ -178,11 +176,9 @@ class Tensor:
             raise Exception(f"Tensor.__add__(self, other) is only implemented with numeric and Tensor,"
                             f" not with {type(other)}")
 
-    @unstable
     def __radd__(self, other):
         return self.__add__(other)
 
-    @unstable
     def __sub__(self, other):
         """
         Element-wise subtraction of two Tensor objects, or with numeric.
@@ -206,15 +202,12 @@ class Tensor:
             raise Exception(f"Tensor.__sub__(self, other) is only implemented with numeric and Tensor,"
                             f" not with {type(other)}")
 
-    @unstable
     def __rsub__(self, other):
         result = Tensor(other - self.__value)
         self.dependencies[result] = ({"local": np.ones(shape=self.shape)}, lambda cache, from_above: cache["local"] * from_above)
 
         return result
 
-    @unstable
-    @logging
     def __mul__(self, other):
         """
         Element-wise multiplication with Tensor object or numeric.
@@ -237,8 +230,6 @@ class Tensor:
             raise Exception(f"Tensor.__mul__(self, other) is only implemented with numeric and Tensor,"
                             f" not with {type(other)}")
 
-    @unstable
-    @logging
     def __truediv__(self, other):
         """
         Implements the '/' operator.
@@ -262,7 +253,6 @@ class Tensor:
             raise Exception(f"Tensor.__truediv__(self, other) is only implemented with numeric and Tensor,"
                             f" not with {type(other)}")
 
-    @unstable
     def __rtruediv__(self, other):
         """
         Implements the '/' operator.
@@ -278,22 +268,18 @@ class Tensor:
 
         return result
 
-    @unstable
     def __rmul__(self, other):
         return self.__mul__(other)
 
-    @unstable
     def __pow__(self, power):
         result = Tensor(self.value ** power)
         self.dependencies[result] = ({"local": power * self.value ** (power-1)}, lambda cache, from_above: cache["local"] * from_above)
 
         return result
 
-    @placeholder
     def __rpow__(self, other):
-        pass
+        raise NotImplementedError("Tensor.__rpow__(...) is not implemented.")
 
-    @unstable
     def __matmul__(self, other):
         """
         Last 2 dimensions have to be valid for dot product,
@@ -311,15 +297,6 @@ class Tensor:
 
     def __repr__(self):
         return str(self.value)
-
-
-@placeholder
-class TensorGroup:
-    """
-    This class implements a group of Tensors
-    with shared value and grad. Can be used
-    for models with loops (e.g. RNNs)
-    """
 
 
 def derive(dF, dx):

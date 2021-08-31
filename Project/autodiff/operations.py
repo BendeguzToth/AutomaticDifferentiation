@@ -8,11 +8,9 @@ import numpy as np
 
 # Project files
 from autodiff.tensor import Tensor
-from autodiff.devtools import unstable, placeholder, logging
 import autodiff.constants as const
 
 
-@logging
 def sum(tensor, axis=None):
     """
     Sums the array over the specified axis.
@@ -28,7 +26,6 @@ def sum(tensor, axis=None):
     return result
 
 
-@logging
 def average(tensor, axis=None):
     """
     This function calculates the average of a given Tensor
@@ -50,33 +47,35 @@ def average(tensor, axis=None):
 
     return result
 
-
-@logging
-def variance(tensor, axis=-2):
+def variance(tensor, axis=-1):
     """
     This function calculates the variance of the Tensor along the specified
     axis.
-    Keeps dimensions!
     :param tensor: Tensor object.
     :param axis: int.
     :return: New Tensor object.
     """
-    mean = repeat(average(tensor, axis=axis), tensor.shape[axis], axis)
-    return average((tensor - mean)**2, axis=axis)
+    avg = np.mean(tensor.value, axis=axis, keepdims=True)
+    x_min_mean = tensor.value - np.broadcast_to(avg, tensor.shape)
+
+    def backward(cache, from_above):
+        unmean = np.full(shape=cache["input_shape"],
+                         fill_value=1 / cache["input_shape"][cache["axis"]]) * np.broadcast_to(from_above, shape=cache[
+            "input_shape"])
+        unpow = 2 * cache["x-mean"] * unmean
+        unmean2 = np.broadcast_to(np.sum(-unpow, axis=cache["axis"], keepdims=True), unpow.shape) * np.full(unpow.shape,
+                                                                                                            1 /
+                                                                                                            unpow.shape[
+                                                                                                                cache[
+                                                                                                                    "axis"]])
+        ret = unmean2 + unpow
+        return ret
+
+    result = Tensor(np.var(tensor.value, axis=axis, keepdims=True))
+    tensor.dependencies.append((result, ({"input_shape": tensor.shape, "axis": axis, "x-mean": x_min_mean}, backward)))
+    return result
 
 
-@placeholder
-@logging
-def max(tensor, axis):
-    """
-    This function returns the maximum elements along the specified axis.
-    :param tensor: Tensor object.
-    :param axis: The axis to take the max along. int.
-    :return: New Tensor object.
-    """
-
-@unstable
-@logging
 def maximum(tensor, b):
     """
     Returns element-wise maximum of either two arrays or
@@ -99,7 +98,6 @@ def maximum(tensor, b):
         return result
 
 
-@logging
 def transpose(tensor, permutation):
     """
     This function transposes the tensor to have the
@@ -120,8 +118,6 @@ def transpose(tensor, permutation):
     return result
 
 
-@unstable
-@logging
 def swap_axis(tensor, ax1=-2, ax2=-1):
     """
     Swaps the specified axis of tensor.
@@ -136,7 +132,6 @@ def swap_axis(tensor, ax1=-2, ax2=-1):
     return result
 
 
-@logging
 def concatenate(tensors, axis):
     """
     Concatenates all tensors in 'tensors'. All of them must have the
@@ -153,20 +148,6 @@ def concatenate(tensors, axis):
     return result
 
 
-@placeholder
-@logging
-def split(tensor, num, axis):
-    """
-
-    :param tensor:
-    :param num:
-    :param axis:
-    :return: List of tensors.
-    """
-
-
-@unstable
-@logging
 def repeat(tensor, rep, axis, backward=const.sum):
     """
     This function tiles the vector along the given axis
@@ -188,8 +169,6 @@ def repeat(tensor, rep, axis, backward=const.sum):
     return result
 
 
-@unstable
-@logging
 def tile_leading_dims(tensor, leading_dims, backward=const.sum):
     """
     This function will broadcast up the specified tensor by
@@ -238,8 +217,6 @@ def tile_leading_dims(tensor, leading_dims, backward=const.sum):
     return result
 
 
-@unstable
-@logging
 def reshape(tensor, newshape):
     """
     Reshapes the given Tensor to the specified shape.
@@ -253,8 +230,6 @@ def reshape(tensor, newshape):
     return result
 
 
-@unstable
-@logging
 def sqrt(tensor):
     """
     Element wise square root.
@@ -267,8 +242,6 @@ def sqrt(tensor):
     return result
 
 
-@unstable
-@logging
 def exp(tensor):
     """
     e ^ tensor
@@ -281,8 +254,6 @@ def exp(tensor):
     return result
 
 
-@unstable
-@logging
 def ln(tensor):
     """
     ln(tensor) - natural logging of the tensor.
