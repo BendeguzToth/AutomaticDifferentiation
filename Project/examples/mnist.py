@@ -9,7 +9,7 @@ import numpy as np
 from examples.data.mnist_loader import load_data_wrapper
 
 import autodiff.utils as utils
-from autodiff.tensor import Tensor, derive, xavier, unit_normal
+from autodiff.tensor import Tensor, differentiate, xavier, unit_normal
 import autodiff.operations as ops
 
 
@@ -73,7 +73,7 @@ for epoch in range(1, N_EPOCH):
     for data, label in generate_batches(training_data, training_labels, BATCH_SIZE):
         loss = utils.vector_cross_entropy(output_layer(hidden_layer(data)), label)
 
-        derive(loss, [hidden_layer.w, hidden_layer.b, output_layer.w, output_layer.b])
+        differentiate(loss, [hidden_layer.w, hidden_layer.b, output_layer.w, output_layer.b])
 
         hidden_layer.update(LEARNING_RATE)
         output_layer.update(LEARNING_RATE)

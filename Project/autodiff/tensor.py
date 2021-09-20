@@ -3,6 +3,9 @@ This file contains the implementation of the Tensor class,
 the main building block of the autodiff module.
 """
 
+# Standard libraries
+from typing import Union, List
+
 # Third-party libraries
 import numpy as np
 
@@ -17,7 +20,9 @@ class Tensor:
     of Tensors can be differentiated automatically with
     respect to any of its (Tensor) parameters.
     """
-    def __init__(self, value=np.array([])):
+    def __init__(self, value:Union[np.ndarray, List] = np.array([])):
+        if type(value) == list:
+            value = np.array(value)
         self.__value = value
         self.__shape = value.shape
         self.__rank = len(self.__shape)
@@ -299,7 +304,7 @@ class Tensor:
         return str(self.value)
 
 
-def derive(dF, dx):
+def differentiate(dF, dx):
     """
     Calculates the derivative of the Tensor dF with respect to dx.
     Sets Tensor.error of all the Tensor object in the list.
